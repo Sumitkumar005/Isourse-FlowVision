@@ -107,15 +107,15 @@ ________________________________________
 ________________________________________
 
 📊 **Dashboard Components (Professional UI/UX)**
--1️⃣ Navigation Bar (Home | Upload | History | Live)
--2️⃣ Live Stream Section (Start/Stop Webcam)
--3️⃣ Upload Image/Video (Button with drag-drop feature)
--4️⃣ Detection Results (Confidence Score, Detected Label)
--5️⃣ Fault Trends (Bar Chart & Pie Chart)
--6️⃣ Recent Inspections Table (Last 5 Inspected Images with Timestamp)
--7️⃣ Export CSV Button (Download inspection history)
--8️⃣ Toggle Live Monitoring (ON/OFF for Remote Monitoring)
--9️⃣ System Logs Panel (Real-time activity tracking)
+- 1️⃣ Navigation Bar (Home | Upload | History | Live)
+- 2️⃣ Live Stream Section (Start/Stop Webcam)
+- 3️⃣ Upload Image/Video (Button with drag-drop feature)
+- 4️⃣ Detection Results (Confidence Score, Detected Label)
+- 5️⃣ Fault Trends (Bar Chart & Pie Chart)
+- 6️⃣ Recent Inspections Table (Last 5 Inspected Images with Timestamp)
+- 7️⃣ Export CSV Button (Download inspection history)
+- 8️⃣ Toggle Live Monitoring (ON/OFF for Remote Monitoring)
+- 9️⃣ System Logs Panel (Real-time activity tracking)
 
 ________________________________________
 
