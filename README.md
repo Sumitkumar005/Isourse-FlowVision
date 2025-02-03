@@ -10,6 +10,7 @@ This project is a fully functional Fault Detection and Quality Inspection System
 This system can be used for industrial quality inspection in manufacturing, assembly lines, and defect analysis processes.
 
 🚀 **Example**
+
 A manufacturing company inspects 1000 casting products daily, whether they are defected or not. Let’s compare how much time it would take to inspect manually by humans versus using this system if implemented in that company.
 - A human takes 10 seconds to inspect one product. So, for 1000 products, it would take 1000 * 10 seconds, which means approximately 2.77 hours, roughly around 3 hours, because human inspection time is not uniform.
 - Now, let’s say there is a conveyor belt where it takes 1 second for one product to reach the next position. We can place a webcam or another high-quality camera on the conveyor belt, and when the camera starts, it will capture a frame every 1 second of the product passing through. The live data will be shown on the UI, and defected products will have a red boundary box, while non-defected products will have a green boundary box. All captured images and their corresponding information will be stored in the database, and we can view the data anytime on the UI, filter by day/week/total inspected, defected vs non-defected, and download the data in CSV format.
