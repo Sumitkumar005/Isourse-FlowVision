@@ -19,8 +19,8 @@ A manufacturing company inspects 1000 casting products daily, whether they are d
 This is one of the features of the system. Additionally, we can set up a system where, if the model detects a faulty product, it will push it to another conveyor for separate handling, keeping the non-faulty products safe.
   
 **future scope**
-1.It takes time and effort to inspect parts of large machines that humans can’t see or identify as potentially dangerous. We can use the same system with drone cameras for this purpose.
-2.The system can also be used to inspect high-voltage transformers located at very high altitudes. This is critical because inspecting such equipment manually comes with many challenges. Humans could fall from electricity towers or even die due to minor errors when working in high-voltage danger zones. The drone system, using this model, could greatly improve safety and efficiency in such high-risk inspections.
+- 1.It takes time and effort to inspect parts of large machines that humans can’t see or identify as potentially dangerous. We can use the same system with drone cameras for this purpose.
+- 2.The system can also be used to inspect high-voltage transformers located at very high altitudes. This is critical because inspecting such equipment manually comes with many challenges. Humans could fall from electricity towers or even die due to minor errors when working in high-voltage danger zones. The drone system, using this model, could greatly improve safety and efficiency in such high-risk inspections.
 
 ________________________________________
 
