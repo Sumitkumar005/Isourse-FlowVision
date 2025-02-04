@@ -133,7 +133,7 @@ Follow these steps to set up the project from scratch.
 
 **Step 1: Clone the Repository**
 ```bash
-git clone https://github.com/yourusername/fault-detection-system.git
+git clone https://github.com/yourusername/Isourse-FlowVision.git
 cd fault-detection-system
 ```
 
