@@ -1,60 +1,55 @@
 from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, Response
 from flask_cors import CORS
 import tensorflow as tf
-import pandas as pd
-from flask import Flask, jsonify, request
 import numpy as np
 from werkzeug.utils import secure_filename
 import os
 from PIL import Image
 import cv2
-from datetime import datetime, timedelta 
-import csv
-import time 
+from datetime import datetime, timedelta  # Import datetime for timestamp
+import threading
+import time  # Import time for timestamping
+
+
 
 app = Flask(__name__)
 CORS(app) 
 
+
 @app.route("/")
 def home():
-    return "Flask backend is running!" #just to check that our bakend working or not
+    return "Flask backend is running!" 
 
-#1 Load Model
-model = tf.keras.models.load_model(r"E:\11111\react\backend\model\defect_detector_model.h5") #it have 85% accurucy 
-UPLOAD_FOLDER = "uploads" #this stores only inspected images
+# Load Model
+model = tf.keras.models.load_model(r"E:\11111\New folder\final\react\backend\model\defect_detector_model.h5")
+UPLOAD_FOLDER = "uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+
+# Ensure upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def preprocess_image(image_path):
     img = Image.open(image_path).convert("RGB")
-    img = img.resize((150, 150))  # can resize the image accordingly to model capicity
+    img = img.resize((150, 150))  # Resize for model
     img_array = np.array(img) / 255.0
     return np.expand_dims(img_array, axis=0)
 
-WEBCAM_IMAGE_FOLDER = "webcam_image_folder" #stored live inspected monitoring images  which firstly live cam caputure 60th frame(2 sec) and saving those image into this folder so we can see the image if we want from video with boundybox
-os.makedirs(WEBCAM_IMAGE_FOLDER, exist_ok=True)
-
-
-CSV_FILE_PATH = "webcam.csv" # stored inspected image infomation with sr no., image name, result, time and data and responsibel for sending this information to UI, where this data will be used to  show as diagram, total inspection history 
-df = pd.read_csv("webcam.csv")
-if not os.path.exists(CSV_FILE_PATH):
-    with open(CSV_FILE_PATH, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Frame Number", "Result", "Image Path"])
-
-
-def draw_bounding_box(image_path, result): #boundry box around the product when it pass throuh ml model as defected or not.
+def draw_bounding_box(image_path, result):
+    # Load the image using OpenCV
     image = cv2.imread(image_path)
     height, width, _ = image.shape
     color = (0, 0, 255) if result == "Defective" else (0, 255, 0)
     cv2.rectangle(image, (50, 50), (width - 50, height - 50), color, 4)
+    # Save the image with the bounding box
     cv2.imwrite(image_path, image)
 
-product_id_counter = 1 
+product_id_counter = 1  # Initialize product ID counter
 
-@app.route("/predict", methods=["POST"]) #main endpoint to which delcalre that image defected or not, and used for all when we upload image, video, and live web cam monitoring  and check whatever it falut or not then give response back to them.
+@app.route("/predict", methods=["POST"])
 def predict():
-    global product_id_counter 
+    global product_id_counter  # Declare the counter as global
 
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -65,46 +60,104 @@ def predict():
     file.save(file_path)
 
     img_array = preprocess_image(file_path)
-    prediction = model.predict(img_array)[0][0] 
+    prediction = model.predict(img_array)[0][0]  # Assuming binary classification
 
-    result = "Defective" if prediction < 0.5 else "Non-Defective" # if we have more than two classed we can use module somthing for that.
-    draw_bounding_box(file_path, result) 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  
+    result = "Defective" if prediction < 0.5 else "Non-Defective"
+    draw_bounding_box(file_path, result)  # Draw bounding box on the image
+    # Save image data to CSV with timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Get current timestamp
     with open('image_data.csv', 'a') as f:
         f.write(f"{product_id_counter},{filename},{result},{timestamp}\n")
     
     product_id_counter += 1  # Increment the product ID counter
 
-    return jsonify({"prediction": result, "image_url": f"/uploads/{filename}"}) 
+    return jsonify({"prediction": result, "image_url": f"/uploads/{filename}"})  # Return image URL
+
+# New endpoint to handle webcam streaming and defect detection
+@app.route("/webcam", methods=["POST"])
+def webcam():
+    global product_id_counter
+    live_monitoring_folder = "live_monitoring"
+    os.makedirs(os.path.join(os.path.dirname(__file__), live_monitoring_folder), exist_ok=True)
+
+    cap = cv2.VideoCapture(0)  # Start the webcam
+    if not cap.isOpened():
+        return jsonify({"error": "Could not open webcam"}), 500
+
+    predictions = []
+    frame_num = 0
+    frame_interval = 60  # Analyze every 60th frame
+    max_predictions = 15  # Limit to 15 predictions
+
+    # Get the width and height of the video stream
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    while cap.isOpened() and len(predictions) < max_predictions:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame")
+            break
+        frame_num += 1
+
+        if frame_num % frame_interval != 0:
+            continue  # Skip frames
+
+        # Convert the frame (BGR format) to RGB and then to a PIL Image
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(frame_rgb)
+
+        # Resize and normalize the image (matching your model's expected input)
+        pil_img = pil_img.resize((150, 150))
+        img_array = np.array(pil_img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Predict using your model
+        prediction = model.predict(img_array)[0][0]
+        result = "Defective" if prediction < 0.5 else "Non-Defective"
+
+        # Draw bounding box
+        color = (0, 0, 255) if result == "Defective" else (0, 255, 0)
+        cv2.rectangle(frame, (50, 50), (width - 50, height - 50), color, 4)
+
+        # Save the frame with bounding box
+        timestamp = int(time.time())
+        output_frame_path = os.path.join(live_monitoring_folder, f"product_{product_id_counter}.jpg")
+        cv2.imwrite(output_frame_path, frame)
+
+        predictions.append({"frame": frame_num, "result": result})
+
+    cap.release()
+    return jsonify({"message": "Webcam processing completed", "predictions": predictions})
 
 
-# endpoint to serve uploaded images
+# New endpoint to serve uploaded images
 @app.route('/uploads/<path:filename>', methods=['GET'])
 def get_uploaded_file(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
-# endpoint to download the CSV file
+# New endpoint to download the CSV file
 @app.route('/download_csv', methods=['GET'])
 def download_csv():
     return send_from_directory(os.getcwd(), 'image_data.csv', as_attachment=True)
 
-# endpoint to get recent uploaded images and their predictions
+# New endpoint to get recent uploaded images and their predictions
 @app.route("/uploaded_images", methods=["GET"])
 def uploaded_images():
     images = os.listdir(app.config["UPLOAD_FOLDER"])
-    images.sort(key=lambda x: os.path.getmtime(os.path.join(app.config["UPLOAD_FOLDER"], x)), reverse=True)  
+    images.sort(key=lambda x: os.path.getmtime(os.path.join(app.config["UPLOAD_FOLDER"], x)), reverse=True)  # Sort by modification time
     recent_images = images[:5]  # Get the last 5 uploaded images
 
     predictions = []
     for image in recent_images:
         img_array = preprocess_image(os.path.join(app.config["UPLOAD_FOLDER"], image))
-        prediction = model.predict(img_array)[0][0] 
+        prediction = model.predict(img_array)[0][0]  # Assuming binary classification
         result = "Defective" if prediction < 0.5 else "Non-Defective"
         predictions.append({"filename": image, "result": result})
 
     return jsonify(predictions)
 
-#endpoint to get inspection data
+# New endpoint to get inspection data
 @app.route("/inspections", methods=["GET"])
 def inspections():
     time_range = request.args.get("range", "today")  # Default to today
@@ -131,8 +184,8 @@ def inspections():
     with open('image_data.csv', 'r') as f:
         for line in f:
             line_data = line.strip().split(',')
-            if len(line_data) != 4:
-                continue  
+            if len(line_data) != 4:  # Ensure there are exactly 4 values
+                continue  # Skip this line if it doesn't have the correct format
             product_id, filename, result, timestamp = line_data
 
             timestamp_date = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").date()
@@ -148,7 +201,7 @@ def inspections():
         "total": defective_count + non_defective_count
     })
 
-# endpoint to upload and process video
+# New endpoint to upload and process video
 @app.route("/upload_video", methods=["POST"])
 def upload_video():
     global product_id_counter
@@ -160,10 +213,7 @@ def upload_video():
     file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     file.save(file_path)
 
-    # Process video frames using OpenCV and save every 60th frame as an image
-    os.makedirs("video_processing_images", exist_ok=True)  # directory for images
-    metadata = []  
-
+    # Process video frames using OpenCV
     cap = cv2.VideoCapture(file_path)
     predictions = []
     frame_num = 0
@@ -172,7 +222,7 @@ def upload_video():
 
     output_video_path = os.path.join(app.config["UPLOAD_FOLDER"], "processed_" + filename)
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    fps = cap.get(cv2.CAP_PROP_FPS) / frame_interval 
+    fps = cap.get(cv2.CAP_PROP_FPS) / frame_interval  # Adjust FPS for output
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
@@ -184,18 +234,18 @@ def upload_video():
         frame_num += 1
 
         if frame_num % frame_interval != 0:
-            continue  
+            continue  # Skip frames
 
         # Convert the frame (BGR format) to RGB and then to a PIL Image
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(frame_rgb)
 
-        # Resize and normalize the image (matching model's expected input)
+        # Resize and normalize the image (matching your model's expected input)
         pil_img = pil_img.resize((150, 150))
         img_array = np.array(pil_img) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 
-        # Predict using model
+        # Predict using your model
         prediction = model.predict(img_array)[0][0]
         result = "Defective" if prediction < 0.5 else "Non-Defective"
 
@@ -203,112 +253,70 @@ def upload_video():
         color = (0, 0, 255) if result == "Defective" else (0, 255, 0)
         cv2.rectangle(frame, (50, 50), (width - 50, height - 50), color, 4)
 
-        # Save the frame as an image every 60th frame
-        if frame_num % frame_interval == 0:
-            image_filename = f"video_processing_images/frame_{frame_num}.jpg"
-            cv2.imwrite(image_filename, frame)  # Save the frame as an image
-            metadata.append({"frame": frame_num, "filename": image_filename, "result": result})  # Store metadata
+        predictions.append({"frame": frame_num, "result": result})
 
-
-        out.write(frame)
+        out.write(frame)  # Save processed frame
 
     cap.release()
     out.release()
 
-    # Save data to CSV
-    with open('video_metadata.csv', 'a') as f:
-        for data in metadata:
-            f.write(f"{data['frame']},{data['filename']},{data['result']}\n")
+    return jsonify({"message": "Video processed successfully", "video_url": f"/uploads/processed_{filename}", "predictions": predictions})
 
-    return jsonify({
-        "message": "Video processed successfully",
-        "video_url": f"/uploads/processed_{filename}",
-        "predictions": predictions,
-        "metadata": metadata
-    })
+# ... your existing imports and endpoints above ...
+from flask import Response
+import time
 
+# New generator function to stream webcam frames with defect detection annotation
+def gen_live_frames():
+    cap = cv2.VideoCapture(0)  # Open default webcam
+    if not cap.isOpened():
+        raise RuntimeError("Could not start webcam.")
 
-@app.route("/webcam", methods=["POST"]) #main for live monitoring but it not showing live cam result on UI when cam start coz of gpu but logic and code are correct. but i have added a video to live monitoring folder in backend folder you can checkout there. and webcam folder for live cam image caputure which stored there with reuslt and time and checkout webcam.csv file which stored live image information when live monitoring start to end. and this csv file data retrive to UI to show the live cam monitoring informtion through diagram,total inspected while live monitoring,defected and non defected, detection logs, history.
-def webcam():
-    cap = cv2.VideoCapture(0)  # Start the live web cam
-    frame_count = 0
-    results = []
-
-    while cap.isOpened():
+    while True:
         ret, frame = cap.read()
         if not ret:
+            print("Failed to capture frame")
             break
 
-        frame_count += 1
+        # Get frame dimensions
+        height, width, _ = frame.shape
 
-        if frame_count % 60 == 0:  # Process every 60th frame
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            resized_frame = cv2.resize(frame_rgb, (150, 150))
-            img_array = np.array(resized_frame) / 255.0
-            img_array = np.expand_dims(img_array, axis=0)
+        # --- Process frame using your model ---
+        # Convert frame (BGR) to RGB, resize, and preprocess
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(frame_rgb)
+        pil_img = pil_img.resize((150, 150))
+        img_array = np.array(pil_img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
 
-            prediction = model.predict(img_array)[0][0]
-            result = "Defective" if prediction < 0.85 else "Non-Defective"
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            img_path = os.path.join(WEBCAM_IMAGE_FOLDER, f"frame_{frame_count}.jpg")
+        # Predict using your defect detection model
+        prediction = model.predict(img_array)[0][0]
+        result = "Defective" if prediction < 0.5 else "Non-Defective"
 
-            cv2.imwrite(img_path, frame)
+        # Draw bounding box and label on the original frame
+        color = (0, 0, 255) if result == "Defective" else (0, 255, 0)
+        cv2.rectangle(frame, (50, 50), (width - 50, height - 50), color, 4)
+        cv2.putText(frame, result, (60, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        # --- End processing ---
 
-            # Draw bounding box on the frame
-            cv2.rectangle(frame, (50, 50), (250, 250), (0, 255, 0), 2)
-            cv2.putText(frame, result, (60, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        # Encode the frame in JPEG format
+        ret2, buffer = cv2.imencode('.jpg', frame)
+        if not ret2:
+            continue
+        frame_bytes = buffer.tobytes()
 
-            with open(CSV_FILE_PATH, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow([frame_count, result, img_path, timestamp])
-                
-            results.append({"frame": frame_count, "result": result})
-
-           
-        cv2.imshow("Live Detection", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # Yield the frame in a multipart response format
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.03)  # Adjust sleep to control stream FPS
 
     cap.release()
-    cv2.destroyAllWindows()
-    
-    return jsonify({"message": "Webcam processing completed", "predictions": results})    
-#histroy endpoint for to show UI
-@app.route("/history", methods=["GET"])
-def history():
-    filter_type = request.args.get("filter", "today")
-    df = pd.read_csv(CSV_FILE_PATH)
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    today = datetime.now().date()
-    
-    if filter_type == "today":
-        df = df[df["Timestamp"].dt.date == today]
-    elif filter_type == "yesterday":
-        df = df[df["Timestamp"].dt.date == today - pd.Timedelta(days=1)]
-    elif filter_type == "weekly":
-        df = df[df["Timestamp"] >= today - pd.Timedelta(weeks=1)]
-    elif filter_type == "monthly":
-        df = df[df["Timestamp"] >= today - pd.Timedelta(days=30)]
-    
-    return jsonify(df.to_dict(orient="records"))  
-             
-#live info of monitoring on UI
-@app.route('/live_data')
-def live_data():
-    try:
-        df = pd.read_csv(CSV_FILE_PATH)
-        total_inspected = len(df)
-        defective = df[df['Result'] == 'Defective'].shape[0]
-        non_defective = df[df['Result'] == 'Non-Defective'].shape[0]
 
-        return jsonify({
-            "total_inspected": total_inspected,
-            "defective": defective,
-            "non_defective": non_defective
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)})
+# New endpoint for live webcam streaming
+@app.route('/live_video_stream')
+def live_video_stream():
+    return Response(gen_live_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    
 if __name__ == "__main__":
     app.run(debug=True)
