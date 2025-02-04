@@ -10,6 +10,7 @@ import cv2
 from datetime import datetime, timedelta  # Import datetime for timestamp
 import threading
 import time  # Import time for timestamping
+from flask import Response
 
 
 
@@ -260,11 +261,8 @@ def upload_video():
     cap.release()
     out.release()
 
-    return jsonify({"message": "Video processed successfully", "video_url": f"/uploads/processed_{filename}", "predictions": predictions})
+    return jsonify({"message": "Video processed successfully", "video_url": f"/uploads/processed_{filename}", "predictions": predictions}
 
-# ... your existing imports and endpoints above ...
-from flask import Response
-import time
 
 # New generator function to stream webcam frames with defect detection annotation
 def gen_live_frames():
